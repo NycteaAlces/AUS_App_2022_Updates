@@ -1,0 +1,17 @@
+
+This is a beta version of the DSM_Moose_Open App. 
+
+Updates include
+- Includes an upgraded database handling approach that should result in fewer bugs.
+- Very preliminary power analysis to assist decisions on additional survey effort . Note this feature may take a long time and was tested on benchmark with 64GB RAM, SSD drives... caution if using this feature.
+- Note that the mapping features are disabled in the 2022/01/14 release, so check back in.
+
+Important note on 32/64-bit RODBC installations: This protocol still relies on Microsoft Access database files developed by Alberta with a specific schema designed for distance sampling surveys. The installation on your computer will matter. Often Windows is installed with 64-bit ODBC drivers, and Microsft Office with 32-bit OBDC drivers. If this is the case for your system, you will need an RStudio/R versio that supports 32-bit. Note that RStudio is deprecating 32-bit support in all new versions (as of 2022). If you can install a 64-bit ODBC installation of Microsoft Office then further action will not be required. 
+
+To use this script, you can run this App directly from R/RStudio command prompt via:
+
+shiny::runGitHub("AUS_App_2022_Updates", "NycteaAlces")
+
+
+
+
