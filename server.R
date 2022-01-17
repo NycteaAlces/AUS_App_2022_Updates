@@ -245,6 +245,7 @@ shinyServer(function(input, output,session) {#----
     moos.hr_cos   <- ds(DistanceInput2, truncation = truncvalue(), key="hr", adjustment = "cos")
     moos.hr_poly  <- ds(DistanceInput2, truncation = truncvalue(), key="hr", adjustment = "poly")
     moos.unif_cos <- ds(DistanceInput2, truncation = truncvalue(), key="unif", adjustment = "cos")
+    #moos.CC.hn.cos
    # mlist <- list(moos.hn_cos, moos.hr_cos, moos.hr_poly, moos.unif_cos,  moos.hn_cos_2,  moos.hn_cos_3, moos.hn_herm,  moos.hr_herm)
     mlist <- list(moos.hn_cos, moos.hr_cos, moos.hr_poly, moos.unif_cos,  moos.hn_herm,  moos.hr_herm)
 
@@ -1350,13 +1351,12 @@ shinyServer(function(input, output,session) {#----
 
 
   POW <- eventReactive(input$PowerAction, {
-
     # # Create a Progress object
     # progress <- shiny::Progress$new()
     # progress$set(message = "Computing data", value = 0)
     # # Close the progress when this reactive exits (even if there's an error)
     # on.exit(progress$close())
-
+    print(paste("INput checkbox returns", input$MUDECheckbox))
     bootstrap <- function(DistanceInput2, S, N){
 
      # DistanceInput2$Region.Label <- OL()$strat$'Stratum Name'[[1]]#`Stratum Name`[1] #In the instance of stratification, replace with 1 stratum
@@ -1395,7 +1395,7 @@ shinyServer(function(input, output,session) {#----
 
       cvsummary_colnames <- names(cvsummary)
       # print(paste("starting loop"))
-
+      withProgress(message = 'Conducting bootstrap from survey data', value=0, max= N, {  #HERE
       for(i in 20:N) {
         # print(paste("starting loop 2"))
 
@@ -1403,6 +1403,7 @@ shinyServer(function(input, output,session) {#----
         for(j in 1:S) {
           print(paste("starting loop 3. N=",N, ",iteration = ",j, "of ",S,", and i=",i," of ",N,"transects." ))
           print(paste("Progress: ", round(((i-20)/(N-20))*100,1),"% completed."))
+          incProgress(i/N, paste("Bootstrap Progress: ", round(((i-20)/(N-20))*100,1),"% completed."))  #HERE
        #   progress$set(value = round(((i-20)/(N-20))*100,1), detail = detail)
           SubsetTable <- DistanceInput2[sample(1:nrow(DistanceInput2),i, replace=FALSE),]
 
@@ -1456,80 +1457,150 @@ shinyServer(function(input, output,session) {#----
         }
 
       } #add another 5 transects to the next iteration (instead of 1) to speed up processing
+      }) ##HERE
       return(cvsummary)
     }
-
-    out <- bootstrap(OL()$DistanceInput2, 5, nrow(OL()$transflown))
+    
+    print(paste("INput checkbox returns", input$MUDECheckbox))
+    out <- bootstrap(OL()$DistanceInput2, 2, nrow(OL()$transflown))
     desired_cv <- input$DesiredCV
     out <- na.omit(out)
     out$cv <- rep(as.numeric(desired_cv),nrow(out)) # add desired cv to table such that it can be plotted in ggplot2 geomsmooth
     cvsummary2 <- subset(out, Pop_cv <= 1) #remove estimates with cv > 1
     cvsummary2 <- subset(out, Pop_cv >=0) # remove estimates with cv <0
-
-#MUDE
-    MDout <- bootstrap(OL.MD()$DistanceInput2.MD, 2, nrow(OL.MD()$transflown)) #change 2, to 5, once working
-  #  desired_cv <- input$DesiredCV
-    MDout <- na.omit(MDout)
-    MDout$cv <- rep(0.2,nrow(MDout)) # add desired cv to table such that it can be plotted in ggplot2 geomsmooth
-    MDcvsummary2 <- subset(MDout, Pop_cv <= 1) #remove estimates with cv > 1
-    MDcvsummary2 <- subset(MDout, Pop_cv >=0) # remove estimates with cv <0
-    
-    pow_plot.MUDE <- ggplot(MDcvsummary2)+ #Plot model and cv
-      geom_jitter(aes(Effort, Pop_cv), colour = "red") + geom_smooth(aes(Effort, Pop_cv), method = lm, formula=y~log(x))  + ylim(low=0, high=1.0) +
-      geom_smooth(aes(Effort, cv),colour="black", linetype="dashed",method = lm, se=FALSE)  +
-      labs(x="Effort (km)", y= "Coefficient of variation")+
-      scale_color_manual(name="Legend", values=c("blue", "black"))+
-      xlim(0,as.numeric(nrow(out))*1.5) 
-    
     pow_plot.1 <- ggplot(cvsummary2)+ #Plot model and cv
-      geom_jitter(aes(Effort, Pop_cv), colour = "red") + geom_smooth(aes(Effort, Pop_cv), method = lm, formula=y~log(x))  + ylim(low=0, high=1.0) +
-      geom_smooth(aes(Effort, cv),colour="black", linetype="dashed",method = lm, se=FALSE)  +
-      labs(x="Effort (km)", y= "Coefficient of variation")+
-      scale_color_manual(name="Legend", values=c("blue", "black"))+
-      xlim(0,as.numeric(nrow(out))*1.5)
-      
-
-
+                  geom_jitter(aes(Effort, Pop_cv), colour = "red") + geom_smooth(aes(Effort, Pop_cv), method = lm, formula=y~log(x))  + ylim(low=0, high=1.0) +
+                  geom_smooth(aes(Effort, cv),colour="black", linetype="dashed",method = lm, se=FALSE)  +
+                  labs(x="Effort (km)", y= "Coefficient of variation")+
+                  scale_color_manual(name="Legend", values=c("blue", "black"))#+
+                  #xlim(0,as.numeric(nrow(out))*1.5)
+    
     mod <- lm(Pop_cv ~ log(Effort+1), data = out) #create linear model with log fn
-    mod_md <- lm(Pop_cv ~ log(Effort+1), data = MDout)
     pow_plot.2 <- plotFit(mod, interval ="prediction", shade=TRUE, col.pred = "lightblue") #plot the prediction intervals for the model
     req_effort <- exp((cal <- calibrate(mod, y0=desired_cv,interval="inversion"))$estimate) #Calculate the required effort to achieve desired_cv
-    MD_req_effort <- exp((cal <- calibrate(mod_md, y0=0.2,interval="inversion"))$estimate)
     print(req_effort)
-    list(pow_plot.1=pow_plot.1, mod, pow_plot.2=mod, pow_plot.2, req_effort=req_effort,
-         pow_plot.MUDE, MD_req_effort)#, pow_plot.WTDE, pow_plot.WAPT)
-  })
+    print(input$MUDECheckbox)
+    print(paste("INput checkbox returns", input$MUDECheckbox))
+    #list(pow_plot.1=pow_plot.1, mod, pow_plot.2=mod, pow_plot.2, req_effort=req_effort)
 
-  output$POW_TXT   <- renderText({paste("This analysis fits a model to the iterative resampling of your moose survey transects.The estimated additional effort to achieve the desired CV of ",input$DesiredCV, " is ", (round(as.numeric(as.character(POW()$req_effort,1))) - round(as.numeric(as.character(OL()$ddf.1.moos$dht$individuals$summary$Effort[1])),1)), "km.")})
-  output$MDPOW_TXT   <- renderText({paste("This analysis fits a model to the iterative resampling of your MUDE survey transects.The estimated additional effort to achieve the desired CV of 0.20 is ", (round(as.numeric(as.character(POW()$MD_req_effort,1))) - round(as.numeric(as.character(OL.MD()$ddf.1.mude$dht$individuals$summary$Effort[1])),1)), "km.")})
+    
+ # reactive({
+    MUDEInput <- input$MUDECheckbox
+    
+
+   # if(MUDEInput==TRUE){
+   #      #MUDE
+   #        MDout <- bootstrap(OL.MD()$DistanceInput2.MD, 2, nrow(OL.MD()$transflown)) #change 2, to 5, once working
+   #      #  desired_cv <- input$DesiredCV
+   #        MDout <- na.omit(MDout)
+   #        MDout$cv <- rep(0.2,nrow(MDout)) # add desired cv to table such that it can be plotted in ggplot2 geomsmooth
+   #        MDcvsummary2 <- subset(MDout, Pop_cv <= 1) #remove estimates with cv > 1
+   #        MDcvsummary2 <- subset(MDout, Pop_cv >=0) # remove estimates with cv <0
+   #        
+   #        pow_plot.MUDE <- ggplot(MDcvsummary2)+ #Plot model and cv
+   #          geom_jitter(aes(Effort, Pop_cv), colour = "red") + geom_smooth(aes(Effort, Pop_cv), method = lm, formula=y~log(x))  + ylim(low=0, high=1.0) +
+   #          geom_smooth(aes(Effort, cv),colour="black", linetype="dashed",method = lm, se=FALSE)  +
+   #          labs(x="Effort (km)", y= "Coefficient of variation")+
+   #          scale_color_manual(name="Legend", values=c("blue", "black"))+
+   #          xlim(0,as.numeric(nrow(out))*1.5) 
+   #         mod_md <- lm(Pop_cv ~ log(Effort+1), data = MDout)
+   #         MD_req_effort <- exp((cal <- calibrate(mod_md, y0=0.2,interval="inversion"))$estimate)
+   #         print(paste("NO MUDE, XXX", MD_req_effort))
+   #         
+    #      POW.x <-  as.list(pow_plot.1=pow_plot.1, mod, pow_plot.2=mod, pow_plot.2, req_effort=req_effort, pow_plot.MUDE, MD_req_effort)#, pow_plot.WTDE, pow_plot.WAPT)     
+    #      return(POW.x)
+    # } else{
+    #         MD_req_effort <- 0
+    #         print(paste("INTO MUDE"))
+            list(pow_plot.1=pow_plot.1, mod, pow_plot.2=mod, pow_plot.2, req_effort=req_effort)#, pow_plot.WTDE, pow_plot.WAPT)
+      
+          
+ 
+
+    
+    # return(if(input$MUDECheckbox){
+    #   #MUDE
+    #   MDout <- bootstrap(OL.MD()$DistanceInput2.MD, 2, nrow(OL.MD()$transflown)) #change 2, to 5, once working
+    #   #  desired_cv <- input$DesiredCV
+    #   MDout <- na.omit(MDout)
+    #   MDout$cv <- rep(0.2,nrow(MDout)) # add desired cv to table such that it can be plotted in ggplot2 geomsmooth
+    #   MDcvsummary2 <- subset(MDout, Pop_cv <= 1) #remove estimates with cv > 1
+    #   MDcvsummary2 <- subset(MDout, Pop_cv >=0) # remove estimates with cv <0
+    #   
+    #   pow_plot.MUDE <- ggplot(MDcvsummary2)+ #Plot model and cv
+    #     geom_jitter(aes(Effort, Pop_cv), colour = "red") + geom_smooth(aes(Effort, Pop_cv), method = lm, formula=y~log(x))  + ylim(low=0, high=1.0) +
+    #     geom_smooth(aes(Effort, cv),colour="black", linetype="dashed",method = lm, se=FALSE)  +
+    #     labs(x="Effort (km)", y= "Coefficient of variation")+
+    #     scale_color_manual(name="Legend", values=c("blue", "black"))+
+    #     xlim(0,as.numeric(nrow(out))*1.5) 
+    #   mod_md <- lm(Pop_cv ~ log(Effort+1), data = MDout)
+    #   MD_req_effort <- exp((cal <- calibrate(mod_md, y0=0.2,interval="inversion"))$estimate)
+    #   print(paste("NO MUDE, XXX", MD_req_effort))
+    #   
+    #   return(list(pow_plot.1=pow_plot.1, mod, pow_plot.2=mod, pow_plot.2, req_effort=req_effort, pow_plot.MUDE, MD_req_effort))#, pow_plot.WTDE, pow_plot.WAPT)     
+    # } else{
+    #   MD_req_effort <- 0
+    #   print(paste("INTO MUDE"))
+    #   return(list(pow_plot.1=pow_plot.1, mod, pow_plot.2=mod, pow_plot.2, req_effort=req_effort, MD_re_effort, pow.plot.MUDE=pow.plot.1))#, pow_plot.WTDE, pow_plot.WAPT)
+    # })
+    # 
+    })
+
+  output$POW_TXT   <- renderText({paste("This analysis fits a model to the iterative resampling of your moose survey transects.The estimated additional effort to achieve the desired CV of ",
+                                        input$DesiredCV,
+                                        " is ", (round(as.numeric(as.character(POW()$req_effort,1))) - round(as.numeric(as.character(OL()$ddf.1.moos$dht$individuals$summary$Effort[1])),1)),
+                                        "km.")})
+  # output$MDPOW_TXT   <- renderText({if(input$MUDECheckbox){ 
+  #  # return(paste("No mule deer selected")) #}
+  #  # else{
+  #     return(paste("This analysis fits a model to the iterative resampling of your MUDE survey transects.The estimated additional effort to achieve the desired CV of 0.20 is ", 
+  #              (round(as.numeric(as.character(POW()$MD_req_effort,1))) - round(as.numeric(as.character(OL.MD()$ddf.1.mude$dht$individuals$summary$Effort[1])),1)),
+  #              "km."))
+  #     }})
+  # output$MDPOW_TXT   <- renderText({if(input$MUDECheckbox){ 
+  #   # return(paste("No mule deer selected")) #}
+  #   # else{
+  #   return(paste("This analysis fits a model to the iterative resampling of your MUDE survey transects.The estimated additional effort to achieve the desired CV of 0.20 is ", 
+  #                (round(as.numeric(as.character(POW()$MD_req_effort,1))) - round(as.numeric(as.character(OL.MD()$ddf.1.mude$dht$individuals$summary$Effort[1])),1)),
+  #                "km."))
+  # }})
   output$MOOS_POW1 <- renderPlot({plot(POW()$pow_plot.1) })
   output$MOOS_POW2 <- renderPlot({plot(POW()$pow_plot.2) })
-  output$MUDE_POW <- renderPlot({plot(POW()$pow_plot.MUDE) })
- # output$WTDE_POW <- renderPlot({plot(POW()$pow_plot.WTDE) })
- # output$WAPT_POW <- renderPlot({plot(POW()$pow_plot.WAPT) })
-  # # Insert the right number of plot output objects into the web page
-  # output$MOOS_AIRDF <- renderUI({
-  #   plot_output_list <- lapply(1:length(OL()$U.list), function(i) {
-  #     plotname <- paste("QQplot", i, sep="")
-  #     plotOutput(plotname, height = 280, width = 250)})
-  #
-  #   # Convert the list to a tagList - this is necessary for the list of items
-  #   # to display properly.
-  #   do.call(tagList, plot_output_list)
-  #   # Call renderPlot for each one. Plots are only actually generated when they
-  #   # are visible on the web page.
-  #   for (i in 1:length(OL()$U.list)) {
-  #     # Need local so that each item gets its own number. Without it, the value
-  #     # of i in the renderPlot() will be the same across all instances, because
-  #     # of when the expression is evaluated.
-  #     local({
-  #       my_i <- i
-  #       plotname <- paste("plot", my_i, sep="")
-  #
-  #       output[[plotname]] <- renderPlot({plot(ds(OL()$U.list[[i]], key="hn", adjustment = "cos", truncation = 425), main= paste("Detection function for aircraft:", unique(U.list[[i]]$Aircraft)))})
-  #     })
-  #   }
-  # })
-
+  #output$MUDE_POW <- renderPlot({if(input$MUDECheckbox) return(plot(POW()$pow_plot.MUDE)) })
+                          # output$WTDE_POW <- renderPlot({plot(POW()$pow_plot.WTDE) })
+                          # output$WAPT_POW <- renderPlot({plot(POW()$pow_plot.WAPT) })
+                          # # Insert the right number of plot output objects into the web page
+                          # output$MOOS_AIRDF <- renderUI({
+                          #   plot_output_list <- lapply(1:length(OL()$U.list), function(i) {
+                          #     plotname <- paste("QQplot", i, sep="")
+                          #     plotOutput(plotname, height = 280, width = 250)})
+                          #
+                          #   # Convert the list to a tagList - this is necessary for the list of items
+                          #   # to display properly.
+                          #   do.call(tagList, plot_output_list)
+                          #   # Call renderPlot for each one. Plots are only actually generated when they
+                          #   # are visible on the web page.
+                          #   for (i in 1:length(OL()$U.list)) {
+                          #     # Need local so that each item gets its own number. Without it, the value
+                          #     # of i in the renderPlot() will be the same across all instances, because
+                          #     # of when the expression is evaluated.
+                          #     local({
+                          #       my_i <- i
+                          #       plotname <- paste("plot", my_i, sep="")
+                          #
+                          #       output[[plotname]] <- renderPlot({plot(ds(OL()$U.list[[i]], key="hn", adjustment = "cos", truncation = 425), main= paste("Detection function for aircraft:", unique(U.list[[i]]$Aircraft)))})
+                          #     })
+                          #   }
+                          # })
+                          #   output$AUSReport <- downloadHandler(
+                          #     filename =  function()
+                          #       (
+                          #         paste("QuickNDirty_AUS_Report-", SYs.Date(), ".pdf", sep = "")
+                          # },
+                          # content = function(file) {
+                          #   
+                          # }
+                          #       )
+                          #)#HERE 2
 
 })
