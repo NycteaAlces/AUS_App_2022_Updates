@@ -1462,7 +1462,7 @@ shinyServer(function(input, output,session) {#----
     }
     
     print(paste("INput checkbox returns", input$MUDECheckbox))
-    out <- bootstrap(OL()$DistanceInput2, 2, nrow(OL()$transflown))
+    out <- bootstrap(OL()$DistanceInput2, 4, nrow(OL()$transflown))
     desired_cv <- input$DesiredCV
     out <- na.omit(out)
     out$cv <- rep(as.numeric(desired_cv),nrow(out)) # add desired cv to table such that it can be plotted in ggplot2 geomsmooth
